@@ -74,8 +74,26 @@ This error means Cloud NAT ran out of ports to allocate. A VM tried to open a ne
 
 Cloud NAT operates at **Layer 3/4** (IP and TCP). It cannot see HTTP status codes, URLs, or headers. If GitHub returns a 401, Cloud NAT has no idea — it just forwards the TCP packets.
 
+## GKE Secondary IP Ranges (Pod Ranges)
+
+A GKE subnet has a **primary IP range** (for node IPs) and one or more **secondary IP ranges** (for pod IPs). When you create a node pool, you assign it a secondary range via `pod_range` — all pods on that pool get IPs from that range.
+
+Multiple secondary ranges can live on the **same subnet**. This matters for NAT because Cloud NAT can target specific secondary ranges using `LIST_OF_SECONDARY_IP_RANGES`, giving you per-pool egress control without needing separate subnets.
+
 ## GKE Node Pools and NAT
 
 See [[notes/kubernetes|Kubernetes Concepts]] for details on **Node Pools**, **nodeSelector**, and **Tolerations**.
 
-The key insight for NAT: different node pools can use different subnets. Different subnets can have different NAT rules and IPs. So by steering workloads to specific node pools, you control which NAT IPs they use — separating critical traffic from noisy traffic.
+Different node pools can use different pod ranges (secondary IP ranges). Cloud NAT can route different secondary ranges through different NAT gateways. By steering workloads to specific node pools, you control which egress IPs they use.
+
+### Isolating Traffic with a Dedicated NAT
+
+To route a subset of workloads through a specific egress IP:
+
+1. **Add a new secondary IP range** to the existing subnet
+2. **Create a new Cloud NAT** with its own static IP, targeting only that range
+3. **Modify the existing NAT** to exclude the new range — switch from `ALL_IP_RANGES` to an explicit `LIST_OF_SECONDARY_IP_RANGES`
+4. **Create a node pool** with `pod_range` pointing to the new range, plus a **taint** for scheduling control
+5. **Configure workloads** to tolerate the taint
+
+Key constraint: **Cloud NAT does not allow two gateways on the same router to cover the same IP range.** When carving out a dedicated range, you must explicitly enumerate all other ranges in the existing NAT.
