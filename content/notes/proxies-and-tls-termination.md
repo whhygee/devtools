@@ -132,4 +132,5 @@ This reduces unauthenticated requests to GitHub dramatically. The key gap: Athen
 
 ## See also
 
-- [[notes/observability-hacks]] — practical techniques (docker binary wrapper, MITM proxy) for debugging CI traffic without full proxy infrastructure
+- [[notes/observability-hacks]] — practical techniques (docker binary wrapper, MITM proxy, squid, event streaming) for debugging CI traffic
+- [[notes/gar-virtual-repos]] — transparent image distribution via GAR virtual repos

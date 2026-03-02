@@ -1,5 +1,5 @@
 ---
-title: KMS & GitHub App Private Key Security
+title: KMS Private Key Security
 ---
 
 Key Management Service (KMS) and how to use Google Cloud KMS to secure a GitHub App private key.

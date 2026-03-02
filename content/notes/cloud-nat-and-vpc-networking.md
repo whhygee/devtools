@@ -8,15 +8,17 @@ A VPC is your private network inside GCP. Think of it as your own isolated secti
 
 A **Shared VPC** lets one "host" project own the network, while other "service" projects (like your GKE clusters) attach to it. This way, one team controls the network, and other teams just use it.
 
+### CIDR Notation
+
+CIDR (Classless Inter-Domain Routing) is how you write IP ranges. `10.36.80.0/20` means "the first 20 bits are the network prefix, the remaining 12 bits are for hosts." That gives 2^12 = 4,096 addresses (`10.36.80.0` through `10.36.95.255`).
+
+Common sizes: `/16` = 65K IPs, `/20` = 4K IPs, `/24` = 256 IPs, `/32` = 1 IP.
+
 ### Subnets
 
-A VPC is divided into **subnets** — IP ranges assigned to a region. Each subnet lives in one region (e.g., `us-east4`). VMs and pods get their IPs from the subnet they're in.
+A VPC is divided into **subnets** — IP ranges (CIDRs) assigned to a region. Each subnet lives in one region (e.g., `us-east4`). VMs and pods get their IPs from the subnet they're in.
 
 Subnets matter for NAT because NAT rules can target specific subnets. If you want different NAT behavior for different workloads, you put those workloads on different subnets.
-
-### Firewall Rules
-
-VPC firewall rules control what traffic is allowed in and out. They operate at the network level — you define rules like "allow TCP port 443 from any source" or "deny all ingress from 10.0.0.0/8." These apply to VMs based on tags or service accounts.
 
 ## Cloud NAT
 
@@ -56,29 +58,21 @@ Example: if GitHub's servers resolve to 3 different IP ranges, you can create 3 
 
 The key learning: **Cloud NAT does not evenly distribute traffic across IPs within the same rule.** The allocation algorithm is not publicly documented, and in practice, traffic tends to concentrate on a few IPs. The fix: split into one IP per rule so there's no choice to make — each destination range gets exactly one IP.
 
-### Endpoint-Independent Mapping
-
-When **disabled**, Cloud NAT can reuse the same port for connections to different destinations. Port 12345 can be used for a connection to GitHub AND a connection to Google at the same time. This means one IP can handle more than 64K total connections — just not more than 64K to the same destination.
-
-When **enabled**, each port is exclusively reserved regardless of destination. Simpler but wastes ports.
-
-### OUT_OF_RESOURCES
-
-This error means Cloud NAT ran out of ports to allocate. A VM tried to open a new connection but its port allocation was maxed out. Common during traffic bursts. Fix: increase `min_ports_per_vm` or `max_ports_per_vm`, add more NAT IPs, or reduce connection hold times.
-
 ### Monitoring
 
 - **`nat/allocated_ports`** — ports currently reserved per VM per IP. Shows distribution.
 - **`nat/dropped_sent_packets_count`** with reason `OUT_OF_RESOURCES` — packets dropped because no ports available.
 - **`get-nat-mapping-info`** — live snapshot of which VMs have ports on which IPs. Not historical, just the current moment.
 
-Cloud NAT operates at **Layer 3/4** (IP and TCP). It cannot see HTTP status codes, URLs, or headers. If GitHub returns a 401, Cloud NAT has no idea — it just forwards the TCP packets.
+Cloud NAT operates at **Layer 3/4** (IP and TCP). It cannot see HTTP status codes, URLs, or headers. If someone returns a 401, Cloud NAT has no idea — it just forwards the TCP packets.
 
 ## GKE Secondary IP Ranges (Pod Ranges)
 
 A GKE subnet has a **primary IP range** (for node IPs) and one or more **secondary IP ranges** (for pod IPs). When you create a node pool, you assign it a secondary range via `pod_range` — all pods on that pool get IPs from that range.
 
-Multiple secondary ranges can live on the **same subnet**. This matters for NAT because Cloud NAT can target specific secondary ranges using `LIST_OF_SECONDARY_IP_RANGES`, giving you per-pool egress control without needing separate subnets.
+Multiple secondary ranges can live on the **same subnet**, and multiple node pools can share the **same secondary range** — each pod just gets a unique IP from the pool. The only reason to use separate ranges is for network-level isolation (e.g., routing different ranges through different NAT gateways).
+
+This matters for NAT because Cloud NAT can target specific secondary ranges using `LIST_OF_SECONDARY_IP_RANGES`, giving you per-pool egress control without needing separate subnets.
 
 ## GKE Node Pools and NAT
 
