@@ -91,3 +91,21 @@ To route a subset of workloads through a specific egress IP:
 5. **Configure workloads** to tolerate the taint
 
 Key constraint: **Cloud NAT does not allow two gateways on the same router to cover the same IP range.** When carving out a dedicated range, you must explicitly enumerate all other ranges in the existing NAT.
+
+### GKE SNAT Masquerade Breaks Secondary Range NAT
+
+**Gotcha:** GKE masquerades pod IPs → node IPs (iptables SNAT) before packets reach Cloud NAT. So a dedicated NAT targeting a secondary pod range never sees traffic — Cloud NAT sees the node IP (primary range) and routes through the main NAT instead.
+
+Fix: disable default SNAT on the cluster:
+
+```hcl
+default_snat_status {
+  disabled = true
+}
+```
+
+Updates in-place, no cluster recreation. Pod IPs are preserved → Cloud NAT sees the actual secondary range → routes to the correct gateway. Safe for CI/CD clusters where all external traffic goes through Cloud NAT.
+
+**ip-masq-agent** is an alternative (ConfigMap + DaemonSet with `nonMasqueradeCIDRs: ["0.0.0.0/0"]`) but the cluster flag is simpler.
+
+**GKE multi-subnet clusters** (1.30.3+) aren't a fix either — you can't control which subnet a node pool uses. GKE auto-selects based on IP availability.
