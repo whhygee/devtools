@@ -66,3 +66,5 @@ Runner Group (repo access control)
 ```
 
 Each layer is configured independently. To give a set of repos a dedicated egress IP, you set up the chain bottom-up (NAT → node pool → RunnerSet → runner group) and control access top-down (assign repos to the group). See [[notes/cloud-nat-and-vpc-networking|Cloud NAT & VPC Networking]] for the NAT half of the chain.
+
+**Important:** This chain only works if GKE SNAT masquerade is disabled (`default_snat_status { disabled = true }`). Otherwise pod IPs get rewritten to node IPs before Cloud NAT, and all traffic goes through the main NAT regardless of pod range. See [[notes/cloud-nat-and-vpc-networking#GKE SNAT Masquerade Breaks Secondary Range NAT|the SNAT gotcha]].
